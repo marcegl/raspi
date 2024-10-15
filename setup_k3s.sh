@@ -1,68 +1,55 @@
 #!/bin/bash
 
 # Parámetros esperados
-ROLE=$1  # 'master' o 'worker'
-IP_SUFFIX=$2  # Por ejemplo, '201' para 192.168.123.201
-MASTER_SUFFIX=${3:-"201"}  # Sufijo de la IP del nodo master, por defecto 201
-NODE_TOKEN=$4  # Token del nodo master (obligatorio para workers)
-HOSTNAME=$5  # Hostname para el Raspberry Pi
+ROLE=$1            # 'master' o 'worker'
+HOSTNAME=$2        # Hostname para el Raspberry Pi
+MASTER_IP=$3       # Dirección IP del nodo master (necesario para workers)
+NODE_TOKEN=$4      # Token del nodo master (necesario para workers)
 
 # Asegurarse de que el sistema esté actualizado
 sudo apt-get update && sudo apt-get upgrade -y
 
 # Configurar el hostname sin reiniciar
-sudo hostnamectl set-hostname $HOSTNAME
+sudo hostnamectl set-hostname "$HOSTNAME"
 sudo sed -i "s/127.0.1.1.*/127.0.1.1    $HOSTNAME/g" /etc/hosts
 echo "Hostname configurado en: $HOSTNAME"
 
-# Verificar si dhcpcd está instalado, si no, instalarlo
-if ! dpkg -l | grep -q dhcpcd; then
-    echo "dhcpcd no está instalado. Procediendo a instalar..."
-    sudo apt-get install -y dhcpcd5
-    sudo systemctl enable dhcpcd
-else
-    echo "dhcpcd ya está instalado."
-fi
-
-# Configuración de IP fija con dhcpcd
-sudo bash -c "cat <<EOF >> /etc/dhcpcd.conf
-interface eth0
-static ip_address=192.168.123.${IP_SUFFIX}/24
-static routers=192.168.123.1
-static domain_name_servers=192.168.123.1 8.8.8.8
-EOF"
-
-sudo systemctl restart dhcpcd
-IP_ASSIGNED=$(hostname -I | awk '{print $1}')
-echo "IP asignada: $IP_ASSIGNED"
-
-# Configuración de cgroups y desactivación de swap
-sudo sed -i 's/$/ cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory/' /boot/cmdline.txt
+# Deshabilitar swap
 sudo swapoff -a
 sudo sed -i '/ swap / s/^/#/' /etc/fstab
 
+# Configurar cgroups si no están configurados
+CGROUP_PARAMS="cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory"
+if ! grep -q "cgroup_enable" /boot/cmdline.txt; then
+    sudo sed -i "1 s|$| $CGROUP_PARAMS|" /boot/cmdline.txt
+fi
+
 # Instalar y configurar fail2ban
 sudo apt-get install -y fail2ban
-sudo bash -c "cat <<EOF > /etc/fail2ban/jail.local
+sudo bash -c 'cat > /etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 bantime  = 1h
 findtime  = 10m
 maxretry = 5
 [sshd]
 enabled = true
-EOF"
+EOF'
 sudo systemctl restart fail2ban
 
 # Configuración de forwarding de IP
 sudo sysctl -w net.ipv4.ip_forward=1
-echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
+if ! grep -q "net.ipv4.ip_forward = 1" /etc/sysctl.conf; then
+    echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
+fi
 
 # Configuración de rendimiento
-sudo echo "dtparam=audio=off" | sudo tee -a /boot/config.txt
+if ! grep -q "dtparam=audio=off" /boot/config.txt; then
+    echo "dtparam=audio=off" | sudo tee -a /boot/config.txt
+fi
 sudo sysctl -w net.core.rmem_max=2500000
 sudo sysctl -w net.core.wmem_max=2500000
 sudo sysctl -w net.core.netdev_max_backlog=5000
-sudo sed -i '/ \/ / s/errors=remount-ro/noatime,errors=remount-ro/' /etc/fstab
+sudo sed -i 's/errors=remount-ro/noatime,errors=remount-ro/' /etc/fstab
 
 # Instalar iptables para asegurar que K3s funcione correctamente
 sudo apt-get install -y iptables
@@ -70,19 +57,56 @@ sudo apt-get install -y iptables
 # Instalar K3s basado en el rol
 if [ "$ROLE" == "master" ]; then
     echo "Instalando K3s en el nodo master..."
-    curl -sfL https://get.k3s.io | sh -s - server --disable=traefik --disable=servicelb --write-kubeconfig-mode 644 --node-name "$(hostname)"
+
+    # Obtener la dirección IP del nodo
+    NODE_IP=$(hostname -I | awk '{print $1}')
+
+    # Instalar K3s en el master con opciones específicas
+    curl -sfL https://get.k3s.io | sh -s - server \
+        --disable=traefik \
+        --disable=servicelb \
+        --write-kubeconfig-mode 644 \
+        --node-name="$HOSTNAME" \
+        --node-ip="$NODE_IP" \
+        --bind-address="$NODE_IP" \
+        --advertise-address="$NODE_IP"
+
+    # Obtener el token del nodo master
     NODE_TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token)
     echo "Token del nodo master: $NODE_TOKEN"
     echo "$NODE_TOKEN" > ~/k3s-node-token.txt
-else
+
+    # Configurar kubectl para el usuario actual
+    mkdir -p ~/.kube
+    sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+    sudo chown $(id -u):$(id -g) ~/.kube/config
+
+    # Verificar el estado de K3s
+    sudo systemctl status k3s
+    kubectl get nodes
+
+elif [ "$ROLE" == "worker" ]; then
     echo "Instalando K3s en un nodo worker..."
-    if [ -z "$NODE_TOKEN" ]; then
-        echo "Por favor, proporciona el NODE_TOKEN obtenido del nodo master."
+
+    if [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
+        echo "Por favor, proporciona la IP del master y el NODE_TOKEN obtenido del nodo master."
         exit 1
     fi
-    curl -sfL https://get.k3s.io | K3S_URL="https://192.168.123.${MASTER_SUFFIX}:6443" K3S_TOKEN="${NODE_TOKEN}" sh -
-fi
 
-# Verificar el estado de K3s
-sudo systemctl status k3s
-kubectl get nodes
+    # Obtener la dirección IP del nodo
+    NODE_IP=$(hostname -I | awk '{print $1}')
+
+    # Instalar K3s en el worker
+    curl -sfL https://get.k3s.io | K3S_URL="https://$MASTER_IP:6443" \
+        K3S_TOKEN="$NODE_TOKEN" \
+        sh -s - agent \
+        --node-name="$HOSTNAME" \
+        --node-ip="$NODE_IP"
+
+    # Verificar el estado de K3s
+    sudo systemctl status k3s-agent
+
+else
+    echo "El rol especificado es inválido. Usa 'master' o 'worker'."
+    exit 1
+fi
