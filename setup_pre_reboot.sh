@@ -57,11 +57,13 @@ echo "Swap deshabilitado."
 
 # Configurar cgroups si no están configurados
 CGROUP_PARAMS="cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory"
-if ! grep -q "cgroup_enable" /boot/cmdline.txt; then
-    sudo sed -i "1 s|$| $CGROUP_PARAMS|" /boot/cmdline.txt
-    echo "Parámetros de cgroup añadidos a /boot/cmdline.txt"
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+
+if ! grep -q "cgroup_enable" "$CMDLINE_FILE"; then
+    sudo sed -i "s|$| $CGROUP_PARAMS|" "$CMDLINE_FILE"
+    echo "Parámetros de cgroup añadidos a $CMDLINE_FILE"
 else
-    echo "Parámetros de cgroup ya están configurados en /boot/cmdline.txt"
+    echo "Parámetros de cgroup ya están configurados en $CMDLINE_FILE"
 fi
 
 # Instalar y configurar fail2ban
@@ -85,8 +87,10 @@ fi
 echo "IP forwarding configurado."
 
 # Configuración de rendimiento
-if ! grep -q "dtparam=audio=off" /boot/config.txt; then
-    echo "dtparam=audio=off" | sudo tee -a /boot/config.txt
+CONFIG_FILE="/boot/firmware/config.txt"
+
+if ! grep -q "dtparam=audio=off" "$CONFIG_FILE"; then
+    echo "dtparam=audio=off" | sudo tee -a "$CONFIG_FILE"
 fi
 sudo sysctl -w net.core.rmem_max=2500000
 sudo sysctl -w net.core.wmem_max=2500000
