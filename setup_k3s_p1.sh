@@ -22,6 +22,13 @@ sudo hostnamectl set-hostname "$HOSTNAME"
 sudo sed -i "s/127.0.1.1.*/127.0.1.1    $HOSTNAME/g" /etc/hosts
 echo "Hostname configurado en: $HOSTNAME"
 
+# Instalar dhcpcd si no está instalado
+if ! command -v dhcpcd >/dev/null 2>&1; then
+    echo "Instalando dhcpcd..."
+    sudo apt-get install -y dhcpcd5
+    sudo systemctl enable dhcpcd
+fi
+
 # Configurar IP estática en /etc/dhcpcd.conf
 sudo bash -c "cat >> /etc/dhcpcd.conf <<EOF
 
@@ -30,15 +37,15 @@ static ip_address=$IP_ADDRESS
 static routers=$GATEWAY
 static domain_name_servers=$GATEWAY 8.8.8.8
 EOF"
-echo "Configuración de IP estática aplicada."
+echo "Configuración de IP estática aplicada en /etc/dhcpcd.conf."
 
-# Reiniciar el servicio de red para aplicar cambios
+# Reiniciar el servicio dhcpcd para aplicar cambios
 sudo systemctl restart dhcpcd
-echo "Servicio de red reiniciado."
+echo "Servicio dhcpcd reiniciado."
 
 # Esperar a que la interfaz de red esté activa con la nueva IP
 echo "Esperando a que la interfaz eth0 tenga la nueva IP..."
-while ! ip addr show eth0 | grep -q "${IP_ADDRESS%/*}"; do
+until ip addr show eth0 | grep -q "${IP_ADDRESS%/*}"; do
     sleep 1
 done
 echo "La interfaz eth0 tiene la IP $IP_ADDRESS"
@@ -95,74 +102,4 @@ echo "Reiniciando el sistema para aplicar cambios..."
 sudo reboot
 
 # El script se detendrá aquí debido al reinicio
-# Las siguientes acciones deben ejecutarse después del reinicio
-
-# Esperar a que el sistema se reinicie
-sleep 60
-
-# Reanudar el script después del reinicio
-# Debes ejecutar el script nuevamente después del reinicio usando un indicador para continuar
-if [ -f /tmp/post_reboot_flag ]; then
-    echo "Continuando con la instalación de K3s después del reinicio."
-else
-    echo "Iniciando reinicio para aplicar cambios. Por favor, ejecuta el script nuevamente después de que el sistema se haya reiniciado."
-    touch /tmp/post_reboot_flag
-    exit 0
-fi
-
-# Instalar K3s basado en el rol
-if [ "$ROLE" == "master" ]; then
-    echo "Instalando K3s en el nodo master..."
-
-    # Obtener la dirección IP del nodo (debería ser la IP estática configurada)
-    NODE_IP="${IP_ADDRESS%/*}"
-
-    # Instalar K3s en el master con opciones específicas
-    curl -sfL https://get.k3s.io | sh -s - server \
-        --disable=traefik \
-        --disable=servicelb \
-        --write-kubeconfig-mode 644 \
-        --node-name="$HOSTNAME" \
-        --node-ip="$NODE_IP" \
-        --bind-address="$NODE_IP" \
-        --advertise-address="$NODE_IP"
-
-    # Obtener el token del nodo master
-    NODE_TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token)
-    echo "Token del nodo master: $NODE_TOKEN"
-    echo "$NODE_TOKEN" > ~/k3s-node-token.txt
-
-    # Configurar kubectl para el usuario actual
-    mkdir -p ~/.kube
-    sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
-    sudo chown $(id -u):$(id -g) ~/.kube/config
-
-    # Verificar el estado de K3s
-    sudo systemctl status k3s
-    kubectl get nodes
-
-elif [ "$ROLE" == "worker" ]; then
-    echo "Instalando K3s en un nodo worker..."
-
-    if [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
-        echo "Por favor, proporciona la IP del master y el NODE_TOKEN obtenido del nodo master."
-        exit 1
-    fi
-
-    # Obtener la dirección IP del nodo
-    NODE_IP="${IP_ADDRESS%/*}"
-
-    # Instalar K3s en el worker
-    curl -sfL https://get.k3s.io | K3S_URL="https://$MASTER_IP:6443" \
-        K3S_TOKEN="$NODE_TOKEN" \
-        sh -s - agent \
-        --node-name="$HOSTNAME" \
-        --node-ip="$NODE_IP"
-
-    # Verificar el estado de K3s
-    sudo systemctl status k3s-agent
-
-else
-    echo "El rol especificado es inválido. Usa 'master' o 'worker'."
-    exit 1
-fi
+exit 0
