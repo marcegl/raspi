@@ -50,10 +50,10 @@ until ip addr show eth0 | grep -q "${IP_ADDRESS%/*}"; do
 done
 echo "La interfaz eth0 tiene la IP $IP_ADDRESS"
 
-# Deshabilitar swap
-sudo swapoff -a
-sudo sed -i '/ swap / s/^/#/' /etc/fstab
-echo "Swap deshabilitado."
+# Deshabilitar el uso de swapfile
+sudo dphys-swapfile swapoff
+sudo systemctl disable dphys-swapfile
+echo "Swapfile deshabilitado."
 
 # Configurar cgroups si no están configurados
 CGROUP_PARAMS="cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory"
