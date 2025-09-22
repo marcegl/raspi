@@ -76,16 +76,10 @@ The deployment involves two scripts:
 
 3. **Run `setup_pre_reboot.sh`**
 
-      For Master Node:
+      For both Master and Worker Nodes:
 
       ```sh
-      ./setup_pre_reboot.sh master <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>
-      ```
-
-      For Worker Nodes:
-
-      ```sh
-      ./setup_pre_reboot.sh worker <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>
+      ./setup_pre_reboot.sh <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>
       ```
 
       The script will:
@@ -124,10 +118,11 @@ The deployment involves two scripts:
 
 ### `setup_pre_reboot.sh`
 
-- `<ROLE>`: Role of the node (master or worker).
 - `<IP_ADDRESS/CIDR>`: Static IP address with CIDR notation (e.g., 192.168.1.85/24).
 - `<GATEWAY>`: Gateway IP address (e.g., 192.168.1.254).
 - `<HOSTNAME>`: Desired hostname for the Raspberry Pi.
+
+**Note**: This script performs the same system preparation for both master and worker nodes.
 
 ### `setup_post_reboot.sh`
 
@@ -144,7 +139,7 @@ The deployment involves two scripts:
 **Pre-Reboot Script:**
 
 ```sh
-./setup_pre_reboot.sh master 192.168.1.85/24 192.168.1.254 pi-master
+./setup_pre_reboot.sh 192.168.1.85/24 192.168.1.254 pi-master
 ```
 
 **Post-Reboot Script:**
@@ -158,7 +153,7 @@ The deployment involves two scripts:
 **Pre-Reboot Script:**
 
 ```sh
-./setup_pre_reboot.sh worker 192.168.1.86/24 192.168.1.254 pi-worker-1
+./setup_pre_reboot.sh 192.168.1.86/24 192.168.1.254 pi-worker-1
 ```
 
 **Post-Reboot Script:**

@@ -1,16 +1,13 @@
 #!/bin/bash
 
 # Parámetros esperados
-ROLE=$1            # 'master' o 'worker'
-IP_ADDRESS=$2      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
-GATEWAY=$3         # Dirección IP del gateway, por ejemplo, '192.168.1.254'
-HOSTNAME=$4        # Hostname para el Raspberry Pi
-MASTER_IP=$5       # Dirección IP del nodo master (necesario para workers)
-NODE_TOKEN=$6      # Token del nodo master (necesario para workers)
+IP_ADDRESS=$1      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
+GATEWAY=$2         # Dirección IP del gateway, por ejemplo, '192.168.1.254'
+HOSTNAME=$3        # Hostname para el Raspberry Pi
 
 # Verificar que se proporcionaron los parámetros necesarios
-if [ -z "$ROLE" ] || [ -z "$IP_ADDRESS" ] || [ -z "$GATEWAY" ] || [ -z "$HOSTNAME" ]; then
-    echo "Uso: $0 <master|worker> <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [MASTER_IP] [NODE_TOKEN]"
+if [ -z "$IP_ADDRESS" ] || [ -z "$GATEWAY" ] || [ -z "$HOSTNAME" ]; then
+    echo "Uso: $0 <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>"
     exit 1
 fi
 
