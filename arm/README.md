@@ -104,17 +104,18 @@ The deployment involves two scripts:
       For Master Node:
 
       ```sh
-      ./setup_post_reboot.sh master <IP_ADDRESS/CIDR> <HOSTNAME>
+      ./setup_post_reboot.sh master
       ```
 
       For Worker Nodes:
 
       ```sh
-      ./setup_post_reboot.sh worker <IP_ADDRESS/CIDR> <HOSTNAME> <MASTER_IP> <NODE_TOKEN>
+      ./setup_post_reboot.sh worker <MASTER_IP> <NODE_TOKEN>
       ```
 
       The script will:
 
+      - Automatically detect hostname and IP address from system configuration.
       - Install K3s based on the specified role.
       - Configure kubectl on the master node for cluster management.
       - Display the status of K3s services.
@@ -131,10 +132,10 @@ The deployment involves two scripts:
 ### `setup_post_reboot.sh`
 
 - `<ROLE>`: Role of the node (master or worker).
-- `<IP_ADDRESS/CIDR>`: Static IP address with CIDR notation.
-- `<HOSTNAME>`: Hostname set previously.
 - `<MASTER_IP>`: (Workers only) IP address of the master node.
 - `<NODE_TOKEN>`: (Workers only) Node token obtained from the master node.
+
+**Note**: This script automatically detects the hostname and IP address from the system configuration set by `setup_pre_reboot.sh`.
 
 ## Examples
 
@@ -149,7 +150,7 @@ The deployment involves two scripts:
 **Post-Reboot Script:**
 
 ```sh
-./setup_post_reboot.sh master 192.168.1.85/24 pi-master
+./setup_post_reboot.sh master
 ```
 
 ### Worker Node Setup
@@ -171,7 +172,7 @@ sudo cat /var/lib/rancher/k3s/server/node-token
 Then run:
 
 ```sh
-./setup_post_reboot.sh worker 192.168.1.86/24 pi-worker-1 192.168.1.85 <NODE_TOKEN>
+./setup_post_reboot.sh worker 192.168.1.85 <NODE_TOKEN>
 ```
 
 ## Notes

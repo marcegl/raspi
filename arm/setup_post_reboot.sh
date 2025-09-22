@@ -2,13 +2,24 @@
 
 # Parámetros esperados
 ROLE=$1            # 'master' o 'worker'
-IP_ADDRESS=$2      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
-HOSTNAME=$3        # Hostname para el Raspberry Pi
-MASTER_IP=$4       # Dirección IP del nodo master (necesario para workers)
-NODE_TOKEN=$5      # Token del nodo master (necesario para workers)
+MASTER_IP=$2       # Dirección IP del nodo master (necesario para workers)
+NODE_TOKEN=$3      # Token del nodo master (necesario para workers)
 
-# Obtener la dirección IP del nodo (debería ser la IP estática configurada)
-NODE_IP="${IP_ADDRESS%/*}"
+# Leer configuración del sistema
+HOSTNAME=$(hostnamectl --static)
+NODE_IP=$(grep "static ip_address" /etc/dhcpcd.conf | tail -1 | awk '{print $3}' | cut -d'/' -f1)
+
+if [ -z "$HOSTNAME" ]; then
+    HOSTNAME=$(hostname)
+fi
+
+if [ -z "$NODE_IP" ]; then
+    NODE_IP=$(ip route get 1.1.1.1 | grep -oP 'src \K\S+')
+fi
+
+echo "Configuración detectada:"
+echo "  Hostname: $HOSTNAME"
+echo "  IP del nodo: $NODE_IP"
 
 if [ "$ROLE" == "master" ]; then
     echo "Instalando K3s en el nodo master..."
@@ -41,6 +52,7 @@ elif [ "$ROLE" == "worker" ]; then
     echo "Instalando K3s en un nodo worker..."
 
     if [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
+        echo "Uso: $0 worker <MASTER_IP> <NODE_TOKEN>"
         echo "Por favor, proporciona la IP del master y el NODE_TOKEN obtenido del nodo master."
         exit 1
     fi

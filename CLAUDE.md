@@ -35,13 +35,13 @@ chmod +x arm/setup_pre_reboot.sh arm/setup_post_reboot.sh
 ./arm/setup_pre_reboot.sh master <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>
 
 # Master node setup (post-reboot)
-./arm/setup_post_reboot.sh master <IP_ADDRESS/CIDR> <HOSTNAME>
+./arm/setup_post_reboot.sh master
 
 # Worker node setup (pre-reboot)
 ./arm/setup_pre_reboot.sh worker <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>
 
 # Worker node setup (post-reboot)
-./arm/setup_post_reboot.sh worker <IP_ADDRESS/CIDR> <HOSTNAME> <MASTER_IP> <NODE_TOKEN>
+./arm/setup_post_reboot.sh worker <MASTER_IP> <NODE_TOKEN>
 ```
 
 ### x86/Ubuntu Server 24.04 Script Execution
@@ -125,10 +125,17 @@ sudo systemctl status k3s-agent
 
 ## Script Parameters
 
-Both scripts expect specific parameters in order:
+### Pre-reboot script parameters:
 - `ROLE`: 'master' or 'worker'
 - `IP_ADDRESS`: Static IP with CIDR notation (e.g., '192.168.1.85/24')
 - `GATEWAY`: Gateway IP address
 - `HOSTNAME`: Desired hostname for the Pi
+- `MASTER_IP`: (Workers only) Master node IP - optional for pre-reboot
+- `NODE_TOKEN`: (Workers only) Token from master node - optional for pre-reboot
+
+### Post-reboot script parameters:
+- `ROLE`: 'master' or 'worker'
 - `MASTER_IP`: (Workers only) Master node IP
 - `NODE_TOKEN`: (Workers only) Token from master node
+
+Note: Post-reboot script automatically detects hostname and IP address from system configuration.
