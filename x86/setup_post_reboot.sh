@@ -23,19 +23,18 @@ echo "  Hostname: $HOSTNAME"
 echo "  IP del nodo: $NODE_IP"
 
 if [ "$ROLE" == "master" ]; then
-    if [ -z "$ROLE" ]; then
-        echo "Uso para master: $0 master"
-        echo "Ejemplo: $0 master"
-        exit 1
-    fi
+    # Para master no se requieren parámetros adicionales
+    echo "Configurando nodo master..."
 elif [ "$ROLE" == "worker" ]; then
-    if [ -z "$ROLE" ] || [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
+    if [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
         echo "Uso para worker: $0 worker <MASTER_IP> <NODE_TOKEN>"
-        echo "Ejemplo: $0 worker 192.168.1.85 K10abcd..."
+        echo "Ejemplo: $0 worker 192.168.123.85 K10abcd..."
         exit 1
     fi
+    echo "Configurando nodo worker..."
 else
     echo "El rol especificado es inválido. Usa 'master' o 'worker'."
+    echo "Uso: $0 {master|worker} [<MASTER_IP> <NODE_TOKEN>]"
     exit 1
 fi
 

@@ -13,6 +13,18 @@ if [ -z "$IP_ADDRESS" ] || [ -z "$GATEWAY" ] || [ -z "$HOSTNAME" ]; then
     exit 1
 fi
 
+# Validar que el gateway esté en la misma red que la IP
+IP_NET=$(echo $IP_ADDRESS | cut -d'/' -f1 | cut -d'.' -f1-3)
+GW_NET=$(echo $GATEWAY | cut -d'.' -f1-3)
+if [ "$IP_NET" != "$GW_NET" ]; then
+    echo "ADVERTENCIA: El gateway $GATEWAY no está en la misma red que la IP $IP_ADDRESS"
+    echo "¿Desea continuar de todas formas? (s/n)"
+    read -r respuesta
+    if [ "$respuesta" != "s" ] && [ "$respuesta" != "S" ]; then
+        exit 1
+    fi
+fi
+
 # Verificar que es Ubuntu Server
 if ! grep -q "Ubuntu" /etc/os-release; then
     echo "Este script está diseñado para Ubuntu Server 24.04"
@@ -34,6 +46,24 @@ if [ -d /etc/cloud ]; then
     echo "Cloud-init networking deshabilitado."
 fi
 
+# Eliminar configuraciones netplan previas que puedan causar conflictos
+echo "Limpiando configuraciones netplan previas..."
+if [ -f /etc/netplan/50-cloud-init.yaml ]; then
+    sudo mv /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.disabled
+    echo "  - Deshabilitado: 50-cloud-init.yaml"
+fi
+if [ -f /etc/netplan/00-installer-config.yaml ]; then
+    sudo mv /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.disabled
+    echo "  - Deshabilitado: 00-installer-config.yaml"
+fi
+# Buscar otros archivos yaml que puedan interferir
+for file in /etc/netplan/*.yaml; do
+    if [ -f "$file" ] && [ "$file" != "$NETPLAN_FILE" ]; then
+        sudo mv "$file" "${file}.disabled"
+        echo "  - Deshabilitado: $(basename $file)"
+    fi
+done
+
 # Configurar IP estática usando netplan
 NETPLAN_FILE="/etc/netplan/01-k3s-config.yaml"
 sudo bash -c "cat > $NETPLAN_FILE <<EOF
@@ -53,11 +83,32 @@ network:
         addresses: [$GATEWAY, 8.8.8.8, 8.8.4.4]
 EOF"
 
+# Establecer permisos correctos para el archivo netplan
+sudo chmod 600 $NETPLAN_FILE
+echo "Permisos de archivo netplan configurados correctamente."
+
 # Validar y aplicar configuración de netplan
 sudo netplan try --timeout=30
 if [ $? -eq 0 ]; then
     sudo netplan apply
     echo "Configuración de IP estática aplicada con netplan."
+
+    # Verificar que la configuración se aplicó correctamente
+    sleep 3
+    CURRENT_IP=$(ip addr show $INTERFACE | grep "inet " | awk '{print $2}')
+    if echo "$CURRENT_IP" | grep -q "$(echo $IP_ADDRESS | cut -d'/' -f1)"; then
+        echo "✓ IP configurada correctamente: $CURRENT_IP"
+    else
+        echo "⚠ ADVERTENCIA: La IP actual ($CURRENT_IP) no coincide con la configurada ($IP_ADDRESS)"
+    fi
+
+    # Verificar que no hay DHCP activo
+    if networkctl status $INTERFACE 2>/dev/null | grep -q "DHCP4"; then
+        echo "⚠ ADVERTENCIA: DHCP sigue activo en la interfaz. Verificando configuración..."
+        # Intentar forzar la deshabilitación de DHCP
+        sudo systemctl restart systemd-networkd
+        sleep 2
+    fi
 else
     echo "Error en configuración netplan. Revise la sintaxis."
     exit 1
@@ -131,8 +182,14 @@ sudo systemctl enable systemd-resolved
 sudo systemctl start systemd-resolved
 
 # Optimizar sistema de archivos (noatime para mejor rendimiento)
+sudo sed -i 's/\([[:space:]]\)defaults/\1defaults,noatime/' /etc/fstab
 sudo sed -i 's/\([[:space:]]\)errors=remount-ro/\1noatime,errors=remount-ro/' /etc/fstab
 echo "Parámetros de rendimiento configurados."
+
+# Deshabilitar systemd-networkd-wait-online para evitar retrasos en el arranque
+sudo systemctl disable systemd-networkd-wait-online.service
+sudo systemctl mask systemd-networkd-wait-online.service
+echo "Servicio de espera de red deshabilitado para arranque más rápido."
 
 echo "Configuración pre-reboot completada. El sistema se reiniciará en 10 segundos..."
 echo "Después del reinicio, ejecute setup_post_reboot.sh master o setup_post_reboot.sh worker <MASTER_IP> <TOKEN>"
