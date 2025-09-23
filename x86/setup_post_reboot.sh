@@ -140,11 +140,20 @@ elif [ "$ROLE" == "worker" ]; then
 
     # Verificar conectividad con el master
     echo "Verificando conectividad con el master ($MASTER_IP)..."
-    nc -z "$MASTER_IP" 6443 || {
+    # Usar curl para verificar conectividad con el puerto 6443
+    if ! curl -k --connect-timeout 5 -s "https://$MASTER_IP:6443" > /dev/null 2>&1; then
         echo "Error: No se puede conectar al master en $MASTER_IP:6443"
-        echo "Verifique que el master esté funcionando y sea accesible."
+        echo "Verifique que:"
+        echo "  1. El master esté funcionando"
+        echo "  2. El servicio K3s esté activo en el master"
+        echo "  3. No haya firewall bloqueando el puerto 6443"
+        echo ""
+        echo "Puede verificar en el master con:"
+        echo "  sudo systemctl status k3s"
+        echo "  sudo ss -tlnp | grep 6443"
         exit 1
-    }
+    fi
+    echo "Conectividad con el master verificada."
 
     # Instalar K3s en el worker
     curl -sfL https://get.k3s.io | K3S_URL="https://$MASTER_IP:6443" \
