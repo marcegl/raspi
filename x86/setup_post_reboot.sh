@@ -44,19 +44,26 @@ if ! grep -q "Ubuntu" /etc/os-release; then
     exit 1
 fi
 
-# Verificar conectividad de red
-ping -c 3 8.8.8.8 > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo "Error: No hay conectividad a internet. Verifique la configuración de red."
-    exit 1
-fi
-
-# Verificar que curl está instalado
+# Verificar que curl está instalado primero (necesario para la verificación de red)
 if ! command -v curl >/dev/null 2>&1; then
     echo "Instalando curl..."
     sudo apt-get update
     sudo apt-get install -y curl
 fi
+
+# Verificar conectividad de red usando curl en lugar de ping
+echo "Verificando conectividad de red..."
+if ! curl -s --max-time 5 http://google.com > /dev/null 2>&1; then
+    # Intentar con una IP directa por si hay problemas de DNS
+    if ! curl -s --max-time 5 http://8.8.8.8 > /dev/null 2>&1; then
+        echo "Error: No hay conectividad a internet. Verifique la configuración de red."
+        echo "Información de red actual:"
+        ip addr show | grep "inet "
+        ip route show
+        exit 1
+    fi
+fi
+echo "Conectividad verificada correctamente."
 
 if [ "$ROLE" == "master" ]; then
     echo "Instalando K3s en el nodo master..."
