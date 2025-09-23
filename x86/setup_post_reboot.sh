@@ -2,25 +2,36 @@
 
 # Parámetros esperados
 ROLE=$1            # 'master' o 'worker'
-IP_ADDRESS=$2      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
-HOSTNAME=$3        # Hostname para Ubuntu Server
-MASTER_IP=$4       # Dirección IP del nodo master (necesario para workers)
-NODE_TOKEN=$5      # Token del nodo master (necesario para workers)
+MASTER_IP=$2       # Dirección IP del nodo master (necesario para workers)
+NODE_TOKEN=$3      # Token del nodo master (necesario para workers)
 
-# Obtener la dirección IP del nodo (debería ser la IP estática configurada)
-NODE_IP="${IP_ADDRESS%/*}"
+# Leer configuración del sistema (similar a ARM)
+HOSTNAME=$(hostnamectl --static)
+NODE_IP=$(ip route get 1.1.1.1 | grep -oP 'src \K\S+' 2>/dev/null)
 
-# Verificar parámetros según el rol
+# Fallback para obtener hostname e IP
+if [ -z "$HOSTNAME" ]; then
+    HOSTNAME=$(hostname)
+fi
+
+if [ -z "$NODE_IP" ]; then
+    NODE_IP=$(hostname -I | awk '{print $1}')
+fi
+
+echo "Configuración detectada:"
+echo "  Hostname: $HOSTNAME"
+echo "  IP del nodo: $NODE_IP"
+
 if [ "$ROLE" == "master" ]; then
-    if [ -z "$ROLE" ] || [ -z "$IP_ADDRESS" ] || [ -z "$HOSTNAME" ]; then
-        echo "Uso para master: $0 master <IP_ADDRESS/CIDR> <HOSTNAME>"
-        echo "Ejemplo: $0 master 192.168.1.85/24 ubuntu-master"
+    if [ -z "$ROLE" ]; then
+        echo "Uso para master: $0 master"
+        echo "Ejemplo: $0 master"
         exit 1
     fi
 elif [ "$ROLE" == "worker" ]; then
-    if [ -z "$ROLE" ] || [ -z "$IP_ADDRESS" ] || [ -z "$HOSTNAME" ] || [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
-        echo "Uso para worker: $0 worker <IP_ADDRESS/CIDR> <HOSTNAME> <MASTER_IP> <NODE_TOKEN>"
-        echo "Ejemplo: $0 worker 192.168.1.86/24 ubuntu-worker-1 192.168.1.85 K10abcd..."
+    if [ -z "$ROLE" ] || [ -z "$MASTER_IP" ] || [ -z "$NODE_TOKEN" ]; then
+        echo "Uso para worker: $0 worker <MASTER_IP> <NODE_TOKEN>"
+        echo "Ejemplo: $0 worker 192.168.1.85 K10abcd..."
         exit 1
     fi
 else
@@ -116,7 +127,7 @@ if [ "$ROLE" == "master" ]; then
     echo "Token para workers guardado en: ~/k3s-node-token.txt"
     echo ""
     echo "Para agregar workers, use:"
-    echo "./setup_post_reboot.sh worker <WORKER_IP/CIDR> <WORKER_HOSTNAME> $NODE_IP $NODE_TOKEN"
+    echo "./setup_post_reboot.sh worker $NODE_IP $NODE_TOKEN"
 
 elif [ "$ROLE" == "worker" ]; then
     echo "Instalando K3s en un nodo worker..."

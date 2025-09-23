@@ -1,16 +1,15 @@
 #!/bin/bash
 
 # Parámetros esperados
-ROLE=$1            # 'master' o 'worker'
-IP_ADDRESS=$2      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
-GATEWAY=$3         # Dirección IP del gateway, por ejemplo, '192.168.1.254'
-HOSTNAME=$4        # Hostname para Ubuntu Server
-INTERFACE=${5:-$(ip route | grep default | awk '{print $5}' | head -n1)}  # Interface de red (autodetectada si no se especifica)
+IP_ADDRESS=$1      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
+GATEWAY=$2         # Dirección IP del gateway, por ejemplo, '192.168.1.254'
+HOSTNAME=$3        # Hostname para Ubuntu Server
+INTERFACE=${4:-$(ip route | grep default | awk '{print $5}' | head -n1)}  # Interface de red (autodetectada si no se especifica)
 
 # Verificar que se proporcionaron los parámetros necesarios
-if [ -z "$ROLE" ] || [ -z "$IP_ADDRESS" ] || [ -z "$GATEWAY" ] || [ -z "$HOSTNAME" ]; then
-    echo "Uso: $0 <master|worker> <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]"
-    echo "Ejemplo: $0 master 192.168.1.85/24 192.168.1.254 ubuntu-master"
+if [ -z "$IP_ADDRESS" ] || [ -z "$GATEWAY" ] || [ -z "$HOSTNAME" ]; then
+    echo "Uso: $0 <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]"
+    echo "Ejemplo: $0 192.168.1.85/24 192.168.1.254 ubuntu-master"
     exit 1
 fi
 
@@ -75,6 +74,12 @@ sudo sysctl -w net.ipv4.ip_forward=1
 sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
 sudo sysctl -w net.bridge.bridge-nf-call-ip6tables=1
 
+# Configurar parámetros de rendimiento de red
+sudo sysctl -w net.core.rmem_max=2500000
+sudo sysctl -w net.core.wmem_max=2500000
+sudo sysctl -w net.core.netdev_max_backlog=5000
+sudo sysctl -w vm.swappiness=1
+
 # Hacer permanentes los parámetros del kernel
 sudo bash -c 'cat >> /etc/sysctl.conf <<EOF
 
@@ -82,6 +87,12 @@ sudo bash -c 'cat >> /etc/sysctl.conf <<EOF
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
+
+# Optimizaciones de red para K3s
+net.core.rmem_max = 2500000
+net.core.wmem_max = 2500000
+net.core.netdev_max_backlog = 5000
+vm.swappiness = 1
 EOF'
 
 # Cargar módulo br_netfilter si no está cargado
@@ -112,16 +123,6 @@ sudo systemctl enable fail2ban
 sudo systemctl restart fail2ban
 echo "Fail2ban instalado y configurado."
 
-# Configuración de rendimiento para servidores
-sudo bash -c 'cat >> /etc/sysctl.conf <<EOF
-
-# Optimizaciones de red para K3s
-net.core.rmem_max = 2500000
-net.core.wmem_max = 2500000
-net.core.netdev_max_backlog = 5000
-vm.swappiness = 1
-EOF'
-
 # Aplicar configuraciones de sysctl
 sudo sysctl -p
 
@@ -130,10 +131,11 @@ sudo systemctl enable systemd-resolved
 sudo systemctl start systemd-resolved
 
 # Optimizar sistema de archivos (noatime para mejor rendimiento)
-sudo sed -i 's/errors=remount-ro/noatime,errors=remount-ro/' /etc/fstab
+sudo sed -i 's/\([[:space:]]\)errors=remount-ro/\1noatime,errors=remount-ro/' /etc/fstab
+echo "Parámetros de rendimiento configurados."
 
 echo "Configuración pre-reboot completada. El sistema se reiniciará en 10 segundos..."
-echo "Después del reinicio, ejecute setup_post_reboot.sh con los mismos parámetros."
+echo "Después del reinicio, ejecute setup_post_reboot.sh master o setup_post_reboot.sh worker <MASTER_IP> <TOKEN>"
 sleep 10
 
 # Reiniciar para aplicar cambios

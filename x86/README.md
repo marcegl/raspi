@@ -25,30 +25,31 @@ Scripts especializados para automatizar la configuración de clusters K3s en ser
 ### Script Pre-Reboot
 ```bash
 chmod +x setup_pre_reboot.sh
-./setup_pre_reboot.sh master 192.168.1.100/24 192.168.1.1 ubuntu-master
+./setup_pre_reboot.sh 192.168.1.100/24 192.168.1.1 ubuntu-master
 ```
 
 ### Script Post-Reboot
 ```bash
 # Master
-./setup_post_reboot.sh master 192.168.1.100/24 ubuntu-master
+./setup_post_reboot.sh master
 
 # Worker
-./setup_post_reboot.sh worker 192.168.1.101/24 ubuntu-worker-1 192.168.1.100 <NODE_TOKEN>
+./setup_post_reboot.sh worker 192.168.1.100 <NODE_TOKEN>
 ```
 
 ## Parámetros
 
 ### setup_pre_reboot.sh
-- `<ROLE>`: master o worker
 - `<IP_ADDRESS/CIDR>`: IP estática con notación CIDR
 - `<GATEWAY>`: IP del gateway
 - `<HOSTNAME>`: Hostname del servidor
 - `[INTERFACE]`: Interfaz de red (autodetectada si se omite)
 
 ### setup_post_reboot.sh
-- Master: `<ROLE> <IP_ADDRESS/CIDR> <HOSTNAME>`
-- Worker: `<ROLE> <IP_ADDRESS/CIDR> <HOSTNAME> <MASTER_IP> <NODE_TOKEN>`
+- Master: `<ROLE>`
+- Worker: `<ROLE> <MASTER_IP> <NODE_TOKEN>`
+
+**Nota**: El script detecta automáticamente hostname e IP del sistema configurado en pre-reboot.
 
 ## Verificaciones
 

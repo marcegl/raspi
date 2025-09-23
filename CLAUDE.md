@@ -50,16 +50,16 @@ chmod +x arm/setup_pre_reboot.sh arm/setup_post_reboot.sh
 chmod +x x86/setup_pre_reboot.sh x86/setup_post_reboot.sh
 
 # Master node setup (pre-reboot)
-./x86/setup_pre_reboot.sh master <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]
+./x86/setup_pre_reboot.sh <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]
 
 # Master node setup (post-reboot)
-./x86/setup_post_reboot.sh master <IP_ADDRESS/CIDR> <HOSTNAME>
+./x86/setup_post_reboot.sh master
 
 # Worker node setup (pre-reboot)
-./x86/setup_pre_reboot.sh worker <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]
+./x86/setup_pre_reboot.sh <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]
 
 # Worker node setup (post-reboot)
-./x86/setup_post_reboot.sh worker <IP_ADDRESS/CIDR> <HOSTNAME> <MASTER_IP> <NODE_TOKEN>
+./x86/setup_post_reboot.sh worker <MASTER_IP> <NODE_TOKEN>
 
 # Get master node token
 sudo cat /var/lib/rancher/k3s/server/node-token
@@ -125,16 +125,17 @@ sudo systemctl status k3s-agent
 
 ## Script Parameters
 
-### Pre-reboot script parameters:
+### Pre-reboot script parameters (both platforms):
 - `IP_ADDRESS`: Static IP with CIDR notation (e.g., '192.168.1.85/24')
 - `GATEWAY`: Gateway IP address
-- `HOSTNAME`: Desired hostname for the Pi
+- `HOSTNAME`: Desired hostname
+- `[INTERFACE]`: (x86 only) Network interface (auto-detected if omitted)
 
-**Note**: The pre-reboot script performs the same configuration for both master and worker nodes.
+**Note**: Pre-reboot scripts perform the same configuration for both master and worker nodes.
 
-### Post-reboot script parameters:
+### Post-reboot script parameters (both platforms):
 - `ROLE`: 'master' or 'worker'
 - `MASTER_IP`: (Workers only) Master node IP
 - `NODE_TOKEN`: (Workers only) Token from master node
 
-Note: Post-reboot script automatically detects hostname and IP address from system configuration.
+**Note**: Post-reboot scripts automatically detect hostname and IP address from system configuration.
