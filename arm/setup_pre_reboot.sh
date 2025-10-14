@@ -76,12 +76,19 @@ EOF'
 sudo systemctl restart fail2ban
 echo "Fail2ban instalado y configurado."
 
-# Configuración de forwarding de IP
+# Configuración de parámetros del kernel para K3s
 sudo sysctl -w net.ipv4.ip_forward=1
+sudo sysctl -w vm.swappiness=1
+
+# Hacer permanentes los parámetros del kernel
 if ! grep -q "net.ipv4.ip_forward = 1" /etc/sysctl.conf; then
     echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
 fi
-echo "IP forwarding configurado."
+
+if ! grep -q "vm.swappiness = 1" /etc/sysctl.conf; then
+    echo "vm.swappiness = 1" | sudo tee -a /etc/sysctl.conf
+fi
+echo "Parámetros del kernel configurados."
 
 # Configuración de rendimiento
 CONFIG_FILE="/boot/firmware/config.txt"
@@ -89,9 +96,6 @@ CONFIG_FILE="/boot/firmware/config.txt"
 if ! grep -q "dtparam=audio=off" "$CONFIG_FILE"; then
     echo "dtparam=audio=off" | sudo tee -a "$CONFIG_FILE"
 fi
-sudo sysctl -w net.core.rmem_max=2500000
-sudo sysctl -w net.core.wmem_max=2500000
-sudo sysctl -w net.core.netdev_max_backlog=5000
 sudo sed -i 's/errors=remount-ro/noatime,errors=remount-ro/' /etc/fstab
 echo "Parámetros de rendimiento configurados."
 

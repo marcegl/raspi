@@ -124,11 +124,6 @@ echo "Swap deshabilitado permanentemente."
 sudo sysctl -w net.ipv4.ip_forward=1
 sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
 sudo sysctl -w net.bridge.bridge-nf-call-ip6tables=1
-
-# Configurar parámetros de rendimiento de red
-sudo sysctl -w net.core.rmem_max=2500000
-sudo sysctl -w net.core.wmem_max=2500000
-sudo sysctl -w net.core.netdev_max_backlog=5000
 sudo sysctl -w vm.swappiness=1
 
 # Hacer permanentes los parámetros del kernel
@@ -139,10 +134,7 @@ net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 
-# Optimizaciones de red para K3s
-net.core.rmem_max = 2500000
-net.core.wmem_max = 2500000
-net.core.netdev_max_backlog = 5000
+# Optimización recomendada
 vm.swappiness = 1
 EOF'
 
