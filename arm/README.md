@@ -27,12 +27,13 @@ This script automates the configuration of Raspberry Pi 4 devices to form a K3s 
 
 ## Features
 
-- Configures static IP addresses using dhcpcd.
+- Configures static IP addresses using netplan and systemd-networkd.
 - Sets hostnames without requiring a reboot.
 - Disables swap for Kubernetes compatibility.
 - Configures cgroup parameters required by K3s.
 - Installs and configures Fail2ban for SSH protection.
 - Applies system performance optimizations.
+- Configures kernel parameters for container networking (br_netfilter).
 - Installs K3s master or worker nodes based on the role.
 - Sets up kubectl for easy cluster management on the master node.
 
@@ -79,18 +80,21 @@ The deployment involves two scripts:
       For both Master and Worker Nodes:
 
       ```sh
-      ./setup_pre_reboot.sh <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>
+      ./setup_pre_reboot.sh <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]
       ```
 
       The script will:
 
       - Update the system packages.
       - Configure the hostname.
-      - Install dhcpcd and set a static IP.
-      - Disable swap.
+      - Install netplan and configure static IP using systemd-networkd.
+      - Disable NetworkManager (if present) to avoid conflicts.
+      - Disable swap completely.
       - Configure cgroup parameters.
+      - Configure kernel parameters for K3s (br_netfilter, ip_forward).
       - Install and configure Fail2ban.
       - Apply system performance optimizations.
+      - Configure systemd-resolved for DNS.
       - Reboot the system.
 
 4. **After Reboot, Run `setup_post_reboot.sh`**
@@ -121,6 +125,7 @@ The deployment involves two scripts:
 - `<IP_ADDRESS/CIDR>`: Static IP address with CIDR notation (e.g., 192.168.1.85/24).
 - `<GATEWAY>`: Gateway IP address (e.g., 192.168.1.254).
 - `<HOSTNAME>`: Desired hostname for the Raspberry Pi.
+- `[INTERFACE]`: (Optional) Network interface name. Defaults to `eth0` if not specified.
 
 **Note**: This script performs the same system preparation for both master and worker nodes.
 
@@ -140,6 +145,8 @@ The deployment involves two scripts:
 
 ```sh
 ./setup_pre_reboot.sh 192.168.1.85/24 192.168.1.254 pi-master
+# Or specify a custom interface:
+./setup_pre_reboot.sh 192.168.1.85/24 192.168.1.254 pi-master eth0
 ```
 
 **Post-Reboot Script:**
@@ -176,7 +183,9 @@ Then run:
 - **Swap Disable**: Disabling swap is necessary for Kubernetes to manage resources effectively.
 - **Cgroup Parameters**: The cgroup settings are crucial for K3s to function correctly on Raspberry Pi.
 - **Fail2ban**: Provides basic security by protecting against SSH brute-force attacks.
-- **Network Manager Conflicts**: Installing dhcpcd on systems using other network managers may cause conflicts.
+- **Network Configuration**: The script uses netplan with systemd-networkd renderer for modern network management, consistent with Ubuntu Server deployments.
+- **NetworkManager**: If NetworkManager is present, it will be disabled to prevent conflicts with systemd-networkd.
+- **Interface Detection**: By default uses `eth0`. For WiFi or other interfaces, specify the interface name as the fourth parameter.
 
 ## Contributing
 

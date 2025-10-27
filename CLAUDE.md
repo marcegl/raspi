@@ -80,10 +80,12 @@ sudo systemctl status k3s-agent
 ## Key Configuration Details
 
 ### ARM/Raspberry Pi Specific
-- **Static IP Configuration**: Uses dhcpcd for network configuration
+- **Static IP Configuration**: Uses netplan with systemd-networkd renderer (consistent with x86)
 - **Boot Configuration**: Modifies `/boot/firmware/cmdline.txt` for cgroups
-- **Swap Management**: Uses `dphys-swapfile` commands
+- **Swap Management**: Uses `dphys-swapfile` (if available) + universal swap.target mask
 - **Audio**: Disables via `/boot/firmware/config.txt`
+- **NetworkManager**: Disabled if present to prevent conflicts with systemd-networkd
+- **Default Interface**: Uses `eth0` by default (configurable via parameter)
 
 ### x86/Ubuntu Server Specific
 - **Static IP Configuration**: Uses netplan with networkd renderer
@@ -93,10 +95,12 @@ sudo systemctl status k3s-agent
 - **Kernel Modules**: Loads `br_netfilter` for bridge networking
 
 ### Common to Both Platforms
+- **Network Stack**: Both use netplan with systemd-networkd renderer for consistency
 - **Security**: Implements Fail2ban for SSH protection
 - **Performance**: Optimizes network buffers, enables noatime
-- **Kubernetes Requirements**: Disables swap, configures cgroups, enables IP forwarding
+- **Kubernetes Requirements**: Disables swap, configures cgroups, enables IP forwarding, loads br_netfilter
 - **K3s Configuration**: Disables Traefik and ServiceLB, uses custom node names and IPs
+- **DNS**: Uses systemd-resolved for DNS management
 
 ## Development Notes
 
@@ -111,10 +115,11 @@ sudo systemctl status k3s-agent
 ## Platform-Specific Package Dependencies
 
 ### ARM/Raspberry Pi
-- `dhcpcd5`: Network configuration
-- `dphys-swapfile`: Swap management (to disable)
+- `netplan.io`: Network configuration (consistent with x86)
+- `dphys-swapfile`: Swap management (optional, used if available)
 - `fail2ban`: SSH security
 - `iptables`: Networking for K3s
+- `systemd-resolved`: DNS optimization (part of systemd)
 
 ### x86/Ubuntu Server
 - `curl`: K3s installation
@@ -129,7 +134,9 @@ sudo systemctl status k3s-agent
 - `IP_ADDRESS`: Static IP with CIDR notation (e.g., '192.168.1.85/24')
 - `GATEWAY`: Gateway IP address
 - `HOSTNAME`: Desired hostname
-- `[INTERFACE]`: (x86 only) Network interface (auto-detected if omitted)
+- `[INTERFACE]`: Network interface
+  - **ARM**: Defaults to `eth0` if omitted
+  - **x86**: Auto-detected via `ip route` if omitted
 
 **Note**: Pre-reboot scripts perform the same configuration for both master and worker nodes.
 

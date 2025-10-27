@@ -4,10 +4,12 @@
 IP_ADDRESS=$1      # Dirección IP estática, por ejemplo, '192.168.1.85/24'
 GATEWAY=$2         # Dirección IP del gateway, por ejemplo, '192.168.1.254'
 HOSTNAME=$3        # Hostname para el Raspberry Pi
+INTERFACE=${4:-eth0}  # Interface de red (por defecto eth0 en Raspberry Pi)
 
 # Verificar que se proporcionaron los parámetros necesarios
 if [ -z "$IP_ADDRESS" ] || [ -z "$GATEWAY" ] || [ -z "$HOSTNAME" ]; then
-    echo "Uso: $0 <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME>"
+    echo "Uso: $0 <IP_ADDRESS/CIDR> <GATEWAY> <HOSTNAME> [INTERFACE]"
+    echo "Ejemplo: $0 192.168.1.85/24 192.168.1.254 raspi-master eth0"
     exit 1
 fi
 
@@ -19,62 +21,73 @@ sudo hostnamectl set-hostname "$HOSTNAME"
 sudo sed -i "s/127.0.1.1.*/127.0.1.1    $HOSTNAME/g" /etc/hosts
 echo "Hostname configurado en: $HOSTNAME"
 
-# Instalar dhcpcd si no está instalado
-if ! command -v dhcpcd >/dev/null 2>&1; then
-    echo "Instalando dhcpcd..."
-    sudo apt-get install -y dhcpcd5
-    sudo systemctl enable dhcpcd
+# Instalar netplan si no está instalado
+if ! command -v netplan >/dev/null 2>&1; then
+    echo "Instalando netplan.io..."
+    sudo apt-get install -y netplan.io
 fi
 
-# Asegurar que dhcpcd esté habilitado y activo ANTES de tocar NetworkManager
-# Esto previene pérdida de conectividad SSH durante la transición
-if ! systemctl is-enabled --quiet dhcpcd; then
-    echo "Habilitando dhcpcd como gestor de red principal..."
-    sudo systemctl enable dhcpcd
-fi
+# Habilitar systemd-networkd
+sudo systemctl enable systemd-networkd
+echo "systemd-networkd habilitado."
 
-if ! systemctl is-active --quiet dhcpcd; then
-    echo "Iniciando servicio dhcpcd..."
-    sudo systemctl start dhcpcd
-    # Esperar a que dhcpcd esté completamente activo
-    sleep 3
-fi
-
-# Deshabilitar NetworkManager para evitar conflictos con dhcpcd
-# NetworkManager viene por defecto en Raspberry Pi OS Bookworm y causa conflictos
-# al gestionar las mismas interfaces que dhcpcd (dual IP address)
-# IMPORTANTE: Solo DESHABILITAR (no DETENER) para evitar corte de SSH
-if systemctl is-enabled --quiet NetworkManager 2>/dev/null; then
-    echo "Deshabilitando NetworkManager (conflicto con dhcpcd)..."
-    echo "NOTA: NetworkManager se detendrá solo después del reinicio del sistema."
-    sudo systemctl disable NetworkManager
-    echo "NetworkManager deshabilitado. Se detendrá en el próximo reinicio."
-else
-    echo "NetworkManager no está habilitado o no está presente."
-fi
-
-echo "dhcpcd configurado como gestor de red. NetworkManager se desactivará tras reiniciar."
-
-# Configurar IP estática en /etc/dhcpcd.conf
-sudo bash -c "cat >> /etc/dhcpcd.conf <<EOF
-
-interface eth0
-static ip_address=$IP_ADDRESS
-static routers=$GATEWAY
-static domain_name_servers=$GATEWAY 8.8.8.8
-EOF"
-echo "Configuración de IP estática aplicada en /etc/dhcpcd.conf."
-
-# Reiniciar el servicio dhcpcd para aplicar cambios
-sudo systemctl restart dhcpcd
-echo "Servicio dhcpcd reiniciado."
-
-# Esperar a que la interfaz de red esté activa con la nueva IP
-echo "Esperando a que la interfaz eth0 tenga la nueva IP..."
-until ip addr show eth0 | grep -q "${IP_ADDRESS%/*}"; do
-    sleep 1
+# Limpiar configuraciones netplan previas (si existen de instalación previa)
+echo "Limpiando configuraciones netplan previas..."
+for file in /etc/netplan/*.yaml; do
+    if [ -f "$file" ]; then
+        sudo mv "$file" "${file}.disabled"
+        echo "  - Deshabilitado: $(basename $file)"
+    fi
 done
-echo "La interfaz eth0 tiene la IP $IP_ADDRESS"
+
+# Configurar IP estática usando netplan
+NETPLAN_FILE="/etc/netplan/01-k3s-config.yaml"
+sudo bash -c "cat > $NETPLAN_FILE <<EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    $INTERFACE:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - $IP_ADDRESS
+      routes:
+        - to: default
+          via: $GATEWAY
+      nameservers:
+        addresses: [$GATEWAY, 8.8.8.8, 8.8.4.4]
+EOF"
+
+# Establecer permisos correctos para el archivo netplan
+sudo chmod 600 $NETPLAN_FILE
+echo "Configuración netplan creada en: $NETPLAN_FILE"
+
+# Validar y aplicar configuración de netplan
+echo "Aplicando configuración netplan..."
+sudo netplan generate
+sudo netplan apply
+echo "Configuración de IP estática aplicada con netplan."
+
+# Verificar que la configuración se aplicó correctamente
+sleep 3
+CURRENT_IP=$(ip addr show $INTERFACE | grep "inet " | awk '{print $2}')
+if echo "$CURRENT_IP" | grep -q "$(echo $IP_ADDRESS | cut -d'/' -f1)"; then
+    echo "✓ IP configurada correctamente: $CURRENT_IP"
+else
+    echo "⚠ ADVERTENCIA: La IP actual ($CURRENT_IP) no coincide con la configurada ($IP_ADDRESS)"
+    echo "Esto es normal si se aplicará después del reinicio."
+fi
+
+# AHORA que systemd-networkd está activo, deshabilitar NetworkManager
+# NetworkManager viene por defecto en Raspberry Pi OS Bookworm y causa conflictos
+if systemctl is-enabled --quiet NetworkManager 2>/dev/null; then
+    echo "Deshabilitando NetworkManager (systemd-networkd ya está activo)..."
+    sudo systemctl disable NetworkManager
+    # Solo deshabilitar, no detener, para evitar interrupciones durante SSH
+    # Se detendrá automáticamente en el próximo reinicio
+    echo "NetworkManager deshabilitado. Se detendrá en el próximo reinicio."
+fi
 
 # Deshabilitar el uso de swapfile
 sudo dphys-swapfile swapoff
@@ -130,6 +143,15 @@ echo "Parámetros de rendimiento configurados."
 
 # Instalar iptables para asegurar que K3s funcione correctamente
 sudo apt-get install -y iptables
+
+# Configurar systemd-resolved para mejorar DNS
+sudo systemctl enable systemd-resolved
+sudo systemctl start systemd-resolved
+
+# Deshabilitar systemd-networkd-wait-online para evitar retrasos en el arranque
+sudo systemctl disable systemd-networkd-wait-online.service
+sudo systemctl mask systemd-networkd-wait-online.service
+echo "Servicio de espera de red deshabilitado para arranque más rápido."
 
 # Reiniciar para aplicar cambios de cgroups y otros
 echo "Reiniciando el sistema para aplicar cambios..."
