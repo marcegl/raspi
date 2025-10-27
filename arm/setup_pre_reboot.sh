@@ -26,6 +26,35 @@ if ! command -v dhcpcd >/dev/null 2>&1; then
     sudo systemctl enable dhcpcd
 fi
 
+# Asegurar que dhcpcd esté habilitado y activo ANTES de tocar NetworkManager
+# Esto previene pérdida de conectividad SSH durante la transición
+if ! systemctl is-enabled --quiet dhcpcd; then
+    echo "Habilitando dhcpcd como gestor de red principal..."
+    sudo systemctl enable dhcpcd
+fi
+
+if ! systemctl is-active --quiet dhcpcd; then
+    echo "Iniciando servicio dhcpcd..."
+    sudo systemctl start dhcpcd
+    # Esperar a que dhcpcd esté completamente activo
+    sleep 3
+fi
+
+# Deshabilitar NetworkManager para evitar conflictos con dhcpcd
+# NetworkManager viene por defecto en Raspberry Pi OS Bookworm y causa conflictos
+# al gestionar las mismas interfaces que dhcpcd (dual IP address)
+# IMPORTANTE: Solo DESHABILITAR (no DETENER) para evitar corte de SSH
+if systemctl is-enabled --quiet NetworkManager 2>/dev/null; then
+    echo "Deshabilitando NetworkManager (conflicto con dhcpcd)..."
+    echo "NOTA: NetworkManager se detendrá solo después del reinicio del sistema."
+    sudo systemctl disable NetworkManager
+    echo "NetworkManager deshabilitado. Se detendrá en el próximo reinicio."
+else
+    echo "NetworkManager no está habilitado o no está presente."
+fi
+
+echo "dhcpcd configurado como gestor de red. NetworkManager se desactivará tras reiniciar."
+
 # Configurar IP estática en /etc/dhcpcd.conf
 sudo bash -c "cat >> /etc/dhcpcd.conf <<EOF
 
